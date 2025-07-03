@@ -2,4 +2,4 @@
 
 zipfile=../img_annot.zip
 [ -f $zipfile ] && rm $zipfile
-zip -r $zipfile main.py annotator.py app.svg app.ttf config.json images image-annotator.exe
+zip -r $zipfile image-annotator.exe app.svg app.ttf config.json images
