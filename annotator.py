@@ -15,14 +15,14 @@ def annotate_image(config, default_units):
     imgpath = os.path.join(inp, obj["img"])
     im = Image.open(imgpath).convert("RGBA")
     draw = ImageDraw.Draw(im)
-    fam = obj.get("fontfamily", config.get("fontfamily", "arial"))
+    fam = resolve_path(config.get("fontfamily", "APP:app.ttf"))
     for a in obj["annots"]:
       x, y = a["pix"]
       fs = int(a.get("fontsize", 12))
       key = (fam, fs)
       if key not in fonts:
         try:
-          fonts[key] = ImageFont.truetype(f"{fam}.ttf", fs)
+          fonts[key] = ImageFont.truetype(fam, fs)
         except:
           fonts[key] = ImageFont.load_default()
       font = fonts[key]

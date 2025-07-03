@@ -1,0 +1,5 @@
+#!/bin/bash
+
+zipfile=../img_annot.zip
+[ -f $zipfile ] && rm $zipfile
+zip -r $zipfile main.py annotator.py app.svg app.ttf config.json images image-annotator.exe
