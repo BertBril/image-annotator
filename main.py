@@ -1,10 +1,10 @@
 import sys, os, json
 from PyQt6.QtWidgets import (
   QApplication, QWidget, QLabel, QComboBox, QVBoxLayout, QHBoxLayout,
-  QPushButton, QLineEdit, QMessageBox, QScrollArea, QFormLayout
+  QPushButton, QLineEdit, QMessageBox, QScrollArea, QFormLayout, QFrame
 )
 from PyQt6.QtGui import QPixmap, QImage, QFont
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
 from annotator import annotate_image, resolve_path
 
 class MainWindow(QWidget):
@@ -19,9 +19,17 @@ class MainWindow(QWidget):
     self.default_units = ""
     self.obj_map = {}
     self.value_fields = []
+    self.font16 = QFont(self.default_font, 16)
 
+    self.max_fields = self.estimate_max_fields()
+    self.top_reserved_height = self.max_fields * 40 + 40
+
+    # --- UI Setup ---
     self.combo = QComboBox()
-    self.combo.setFont(QFont(self.default_font, 16))
+    self.combo.setFont(self.font16)
+
+    top_label = QLabel("Image")
+    top_label.setFont(self.font16)
 
     self.image_label = QLabel()
     self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -29,21 +37,22 @@ class MainWindow(QWidget):
     self.form_layout = QFormLayout()
     self.form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
 
+    self.form_frame = QFrame()
+    self.form_frame.setLayout(self.form_layout)
+    self.form_frame.setMinimumHeight(self.top_reserved_height)
+
     self.scroll = QScrollArea()
-    self.form_widget = QWidget()
-    self.form_widget.setLayout(self.form_layout)
     self.scroll.setWidgetResizable(True)
-    self.scroll.setWidget(self.form_widget)
+    self.scroll.setWidget(self.form_frame)
 
     self.apply_button = QPushButton("Apply")
     self.save_button = QPushButton("Save")
-    self.apply_button.setFont(QFont(self.default_font, 16))
-    self.save_button.setFont(QFont(self.default_font, 16))
+    self.apply_button.setFont(self.font16)
+    self.save_button.setFont(self.font16)
 
+    # Layouts
     top_layout = QHBoxLayout()
-    img_label = QLabel("Image")
-    img_label.setFont(QFont(self.default_font, 16))
-    top_layout.addWidget(img_label)
+    top_layout.addWidget(top_label)
     top_layout.addWidget(self.combo)
 
     button_layout = QHBoxLayout()
@@ -52,30 +61,29 @@ class MainWindow(QWidget):
 
     layout = QVBoxLayout()
     layout.addLayout(top_layout)
-    layout.addWidget(self.scroll, stretch=1)
+    layout.addWidget(self.scroll)
     layout.addLayout(button_layout)
-    layout.addWidget(self.image_label, stretch=3)
+    layout.addWidget(self.image_label)
     self.setLayout(layout)
 
-    # Populate combo and object map
+    # Load object map
     for obj in self.cfg["objects"]:
       name = obj.get("name", obj["img"])
       self.combo.addItem(name)
       self.obj_map[name] = obj
 
-    # Hook up signals only after everything is initialized
+    # Hook up signals AFTER init
     self.combo.currentIndexChanged.connect(self.load_object)
     self.apply_button.clicked.connect(self.apply_annotations)
     self.save_button.clicked.connect(self.save_image)
 
     defobj = self.cfg.get("defobj")
-    if defobj:
-      idx = self.combo.findText(defobj)
-      if idx >= 0:
-        self.combo.setCurrentIndex(idx)
-        self.load_object(idx)
-    else:
-      self.load_object(0)
+    idx = self.combo.findText(defobj) if defobj else 0
+    self.combo.setCurrentIndex(idx)
+    self.load_object(idx)
+
+  def estimate_max_fields(self):
+    return max(len(obj.get("annots", [])) for obj in self.cfg["objects"])
 
   def form_clear(self):
     while self.form_layout.count():
@@ -94,12 +102,16 @@ class MainWindow(QWidget):
     obj = self.obj_map[name]
 
     for a in obj["annots"]:
-      lbl = a.get("lbl", "")
+      lbl_txt = a.get("lbl", "")
       val = a.get("value", a.get("default", ""))
+      lbl = QLabel(lbl_txt)
+      lbl.setFont(self.font16)
       field = QLineEdit(str(val))
-      field.setFont(QFont(self.default_font, 16))
+      field.setFont(self.font16)
+      field.setMinimumWidth(120)
+      field.setMinimumHeight(30)
       field.returnPressed.connect(self.apply_annotations)
-      self.form_layout.addRow(QLabel(lbl), field)
+      self.form_layout.addRow(lbl, field)
       self.value_fields.append((a, field))
 
     self.apply_annotations()
@@ -118,6 +130,11 @@ class MainWindow(QWidget):
     if img:
       qimg = self.pil_to_qimage(img)
       self.image_label.setPixmap(QPixmap.fromImage(qimg))
+
+      # Resize the main window to match image + top area
+      img_w, img_h = img.size
+      total_h = img_h + self.top_reserved_height + 80
+      self.resize(max(img_w + 40, 600), total_h)
 
   def save_image(self):
     name = self.combo.currentText()
@@ -149,7 +166,6 @@ class MainWindow(QWidget):
 if __name__ == "__main__":
   app = QApplication(sys.argv)
   w = MainWindow()
-  w.resize(900, 700)
   w.show()
   sys.exit(app.exec())
 
