@@ -1,0 +1,74 @@
+{
+  "inputdir": "APP:images",
+  "fontfamily": "helvetica",
+  "defobj": "Simple Top",
+
+  "objects": [
+    {
+      "img": "top.png",
+      "name": "Simple Top",
+      "outputdir": "C:\\TEMP\\TOPS",
+      "fontfamily": "helvetica",
+      "annots": [
+        {
+          "lbl": "Chest width",
+          "fgcolor": "#123456",
+          "bgcolor": "#ffffff",
+          "fontsize": "12",
+          "pix": [112, 112],
+          "placeat": "top",
+          "value": "50",
+          "units": " cm"
+        },
+        {
+          "lbl": "Shoulder width",
+          "fgcolor": "#234567",
+          "bgcolor": "#ffffee",
+          "fontsize": "12",
+          "pix": [112, 50],
+          "placeat": "bottom",
+          "value": "60",
+          "units": " cm"
+        },
+        {
+          "lbl": "Length",
+          "fgcolor": "#234567",
+          "bgcolor": "#ffffee",
+          "fontsize": "14",
+          "pix": [120, 200],
+          "placeat": "right",
+          "default": "80",
+          "units": " cm"
+        }
+      ]
+    },
+    {
+      "img": "us_trousers.png",
+      "name": "Gigantic US Trousers",
+      "outputdir": "C:\\TEMP\\TROUSERS",
+      "annots": [
+        {
+          "lbl": "Crotch height",
+          "fgcolor": "#123456",
+          "bgcolor": "#ffffff",
+          "fontsize": "12",
+          "pix": [112, 112],
+          "placeat": "right",
+          "value": "3",
+          "units": "''"
+        },
+        {
+          "lbl": "Waist cirdumference",
+          "fgcolor": "#234567",
+          "bgcolor": "#ffffee",
+          "fontsize": "14",
+          "pix": [112, 60],
+          "placeat": "bottom",
+          "value": "1.1",
+          "units": " yards"
+        }
+      ]
+    }
+  ]
+}
+
