@@ -7,35 +7,34 @@
     {
       "img": "top.png",
       "name": "Simple Top",
-      "outputdir": "C:\\TEMP\\TOPS",
-      "fontfamily": "helvetica",
+      "outputdir": "/tmp/tops",
       "annots": [
         {
           "lbl": "Chest width",
-          "fgcolor": "#123456",
+          "fgcolor": "#000000",
           "bgcolor": "#ffffff",
-          "fontsize": "12",
-          "pix": [112, 112],
-          "placeat": "top",
+          "fontsize": "16",
+          "pix": [320, 240],
+          "placeat": "bottom",
           "value": "50",
           "units": " cm"
         },
         {
           "lbl": "Shoulder width",
-          "fgcolor": "#234567",
+          "fgcolor": "#000000",
           "bgcolor": "#ffffee",
-          "fontsize": "12",
-          "pix": [112, 50],
-          "placeat": "bottom",
+          "fontsize": "16",
+          "pix": [190, 90],
+          "placeat": "top",
           "value": "60",
           "units": " cm"
         },
         {
           "lbl": "Length",
-          "fgcolor": "#234567",
+          "fgcolor": "#000000",
           "bgcolor": "#ffffee",
-          "fontsize": "14",
-          "pix": [120, 200],
+          "fontsize": "16",
+          "pix": [290, 420],
           "placeat": "right",
           "default": "80",
           "units": " cm"
@@ -45,24 +44,24 @@
     {
       "img": "us_trousers.png",
       "name": "Gigantic US Trousers",
-      "outputdir": "C:\\TEMP\\TROUSERS",
+      "outputdir": "/tmp/trousers",
       "annots": [
         {
           "lbl": "Crotch height",
-          "fgcolor": "#123456",
+          "fgcolor": "#000044",
           "bgcolor": "#ffffff",
-          "fontsize": "12",
-          "pix": [112, 112],
+          "fontsize": "20",
+          "pix": [280, 220],
           "placeat": "right",
-          "value": "3",
+          "value": "3.4",
           "units": "''"
         },
         {
           "lbl": "Waist cirdumference",
-          "fgcolor": "#234567",
+          "fgcolor": "#000044",
           "bgcolor": "#ffffee",
-          "fontsize": "14",
-          "pix": [112, 60],
+          "fontsize": "20",
+          "pix": [260, 130],
           "placeat": "bottom",
           "value": "1.1",
           "units": " yards"

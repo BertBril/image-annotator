@@ -23,7 +23,7 @@ jobs:
 
       - name: Build EXE with PyInstaller
         run: |
-          pyinstaller --noconfirm --onefile --windowed main.py --name image-annotator --add-data "config.json;." --add-data "images;images"
+          pyinstaller --noconfirm --onefile --windowed main.py --name image-annotator
 
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4

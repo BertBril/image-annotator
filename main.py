@@ -1,59 +1,53 @@
 import sys, os, json
 from PyQt6.QtWidgets import (
   QApplication, QWidget, QLabel, QComboBox, QVBoxLayout, QHBoxLayout,
-  QPushButton, QLineEdit, QMessageBox, QScrollArea, QFormLayout, QFrame
+  QPushButton, QLineEdit, QFileDialog, QMessageBox, QGridLayout, QFrame
 )
-from PyQt6.QtGui import QPixmap, QImage, QFont
-from PyQt6.QtCore import Qt, QSize
+from PyQt6.QtGui import QPixmap, QImage, QIcon, QFont
+from PyQt6.QtCore import Qt
 from annotator import annotate_image, resolve_path
 
 class MainWindow(QWidget):
   def __init__(self):
     super().__init__()
     self.setWindowTitle("Image Annotator")
+    self.setWindowIcon(QIcon(resolve_path("app.svg")))
 
     with open(resolve_path("config.json"), "r") as f:
       self.cfg = json.load(f)
 
     self.default_font = self.cfg.get("fontfamily", "arial")
     self.default_units = ""
-    self.obj_map = {}
-    self.value_fields = []
-    self.font16 = QFont(self.default_font, 16)
 
-    self.max_fields = self.estimate_max_fields()
-    self.top_reserved_height = self.max_fields * 40 + 40
-
-    # --- UI Setup ---
+    # UI Elements
     self.combo = QComboBox()
-    self.combo.setFont(self.font16)
-
-    top_label = QLabel("Image")
-    top_label.setFont(self.font16)
-
+    self.combo.setFont(QFont('', 16))
     self.image_label = QLabel()
     self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-    self.form_layout = QFormLayout()
-    self.form_layout.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
+    self.value_fields = []
+    self.unit_fields = []
 
-    self.form_frame = QFrame()
-    self.form_frame.setLayout(self.form_layout)
-    self.form_frame.setMinimumHeight(self.top_reserved_height)
+    self.grid = QGridLayout()
+    label = QLabel("Image")
+    label.setFont(QFont('', 16))
+    label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+    self.grid.addWidget(label, 0, 0)
+    self.grid.addWidget(self.combo, 0, 1)
 
-    self.scroll = QScrollArea()
-    self.scroll.setWidgetResizable(True)
-    self.scroll.setWidget(self.form_frame)
+    self.grid_frame = QFrame()
+    self.grid_frame.setLayout(self.grid)
 
     self.apply_button = QPushButton("Apply")
     self.save_button = QPushButton("Save")
-    self.apply_button.setFont(self.font16)
-    self.save_button.setFont(self.font16)
+    self.apply_button.setFont(QFont('', 16))
+    self.save_button.setFont(QFont('', 16))
 
-    # Layouts
-    top_layout = QHBoxLayout()
-    top_layout.addWidget(top_label)
-    top_layout.addWidget(self.combo)
+    self.apply_button.clicked.connect(self.apply_annotations)
+    self.save_button.clicked.connect(self.save_image)
+
+    top_layout = QVBoxLayout()
+    top_layout.addWidget(self.grid_frame)
 
     button_layout = QHBoxLayout()
     button_layout.addWidget(self.apply_button)
@@ -61,99 +55,102 @@ class MainWindow(QWidget):
 
     layout = QVBoxLayout()
     layout.addLayout(top_layout)
-    layout.addWidget(self.scroll)
     layout.addLayout(button_layout)
-    layout.addWidget(self.image_label)
+    layout.addWidget(self.image_label, stretch=3)
     self.setLayout(layout)
 
-    # Load object map
+    # Delay connections until initialized
+    self.obj_map = {}
     for obj in self.cfg["objects"]:
       name = obj.get("name", obj["img"])
-      self.combo.addItem(name)
       self.obj_map[name] = obj
-
-    # Hook up signals AFTER init
-    self.combo.currentIndexChanged.connect(self.load_object)
-    self.apply_button.clicked.connect(self.apply_annotations)
-    self.save_button.clicked.connect(self.save_image)
+      self.combo.addItem(name)
 
     defobj = self.cfg.get("defobj")
-    idx = self.combo.findText(defobj) if defobj else 0
-    self.combo.setCurrentIndex(idx)
-    self.load_object(idx)
+    if defobj:
+      idx = self.combo.findText(defobj)
+      if idx >= 0:
+        self.combo.setCurrentIndex(idx)
 
-  def estimate_max_fields(self):
-    return max(len(obj.get("annots", [])) for obj in self.cfg["objects"])
+    self.combo.currentIndexChanged.connect(self.load_object)
+    self.load_object(self.combo.currentIndex())
 
-  def form_clear(self):
-    while self.form_layout.count():
-      item = self.form_layout.takeAt(0)
+  def load_object(self, idx):
+    self.value_fields = []
+    self.unit_fields = []
+
+    # Clear grid except row 0
+    while self.grid.count() > 2:
+      item = self.grid.takeAt(2)
       w = item.widget()
       if w:
         w.deleteLater()
 
-  def load_object(self, idx):
-    self.value_fields = []
-    self.form_clear()
-
-    name = self.combo.itemText(idx)
-    if name not in self.obj_map:
+    name = self.combo.currentText()
+    obj = self.obj_map.get(name)
+    if not obj:
       return
-    obj = self.obj_map[name]
 
-    for a in obj["annots"]:
-      lbl_txt = a.get("lbl", "")
-      val = a.get("value", a.get("default", ""))
-      lbl = QLabel(lbl_txt)
-      lbl.setFont(self.font16)
-      field = QLineEdit(str(val))
-      field.setFont(self.font16)
-      field.setMinimumWidth(120)
-      field.setMinimumHeight(30)
-      field.returnPressed.connect(self.apply_annotations)
-      self.form_layout.addRow(lbl, field)
-      self.value_fields.append((a, field))
+    annots = obj.get("annots", [])
+    for i, a in enumerate(annots):
+      row = i + 1
+      lbl = QLabel(a.get("lbl", ""))
+      lbl.setFont(QFont('', 16))
+      lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
 
+      val_edit = QLineEdit(str(a.get("value", a.get("default", ""))))
+      val_edit.setFont(QFont('', 16))
+      val_edit.setMinimumWidth(100)
+      val_edit.returnPressed.connect(self.apply_annotations)
+
+      units_edit = QLineEdit(str(a.get("units", "")))
+      units_edit.setFont(QFont('', 16))
+      units_edit.setMinimumWidth(80)
+      units_edit.returnPressed.connect(self.apply_annotations)
+
+      self.grid.addWidget(lbl, row, 0)
+      self.grid.addWidget(val_edit, row, 1)
+      self.grid.addWidget(units_edit, row, 2)
+
+      self.value_fields.append((a, val_edit))
+      self.unit_fields.append(units_edit)
+
+    self.adjustSize()
     self.apply_annotations()
 
   def apply_annotations(self):
     name = self.combo.currentText()
-    if name not in self.obj_map:
-      return
     obj = self.obj_map[name]
 
-    for a, field in self.value_fields:
-      a["value"] = field.text()
+    for (a, val_edit), units_edit in zip(self.value_fields, self.unit_fields):
+      a["value"] = val_edit.text()
+      a["units"] = units_edit.text()
 
     img_map = annotate_image(self.cfg, self.default_units)
-    img, _ = img_map.get(name, (None, None))
-    if img:
-      qimg = self.pil_to_qimage(img)
-      self.image_label.setPixmap(QPixmap.fromImage(qimg))
-
-      # Resize the main window to match image + top area
-      img_w, img_h = img.size
-      total_h = img_h + self.top_reserved_height + 80
-      self.resize(max(img_w + 40, 600), total_h)
+    img, _ = img_map[name]
+    qimg = self.pil_to_qimage(img)
+    self.image_label.setPixmap(QPixmap.fromImage(qimg))
 
   def save_image(self):
     name = self.combo.currentText()
-    if name not in self.obj_map:
-      return
     obj = self.obj_map[name]
 
-    for a, field in self.value_fields:
-      a["value"] = field.text()
+    for (a, val_edit), units_edit in zip(self.value_fields, self.unit_fields):
+      a["value"] = val_edit.text()
+      a["units"] = units_edit.text()
 
     img_map = annotate_image(self.cfg, self.default_units)
-    img, outdir = img_map.get(name, (None, None))
-    if not img:
-      return
-
+    img, outdir = img_map[name]
     if not os.path.exists(outdir):
       os.makedirs(outdir)
-    outname = os.path.splitext(obj["img"])[0] + "_annotated.png"
-    path = os.path.join(outdir, outname)
+
+    base = os.path.splitext(obj["img"])[0]
+    suggested = os.path.join(outdir, base + "_annotated.png")
+    path, _ = QFileDialog.getSaveFileName(self, "Save Image As", suggested, "PNG Files (*.png)")
+    if not path:
+      return
+    if not path.lower().endswith(".png"):
+      path += ".png"
     img.save(path)
     QMessageBox.information(self, "Saved", f"Saved to:\n{path}")
 
@@ -166,6 +163,7 @@ class MainWindow(QWidget):
 if __name__ == "__main__":
   app = QApplication(sys.argv)
   w = MainWindow()
+  w.resize(1000, 800)
   w.show()
   sys.exit(app.exec())
 
