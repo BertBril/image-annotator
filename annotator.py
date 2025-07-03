@@ -34,7 +34,9 @@ def annotate_image(config, default_units):
             units = a.get("units") or default_units
             if units:
                 text += units
-            w, h = draw.textsize(text, font=font)
+            bbox = d.textbbox((0, 0), txt, font=f)
+            w = bbox[2] - bbox[0]
+            h = bbox[3] - bbox[1]
             bg = a.get("bgcolor", "#ffffff")
             fg = a.get("fgcolor", "#000000")
             place = a.get("placeat", "right").lower()
