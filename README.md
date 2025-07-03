@@ -13,3 +13,5 @@ Useful in 2025, maybe 2026. After that you just explain your AI and he'll do it 
 Made with help from ChatGPT 4o, but I had to steer quite a bit. Cost me a few hours.
 
 Enjoy!
+
+![image](https://github.com/user-attachments/assets/3f45fafc-e809-43cb-80c2-9dd09b7f82e6)
