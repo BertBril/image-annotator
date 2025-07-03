@@ -13,8 +13,7 @@ jobs:
       - name: Install dependencies
         run: pip install pyinstaller pillow pyqt6
       - name: Build EXE with PyInstaller
-        run: |
-          pyinstaller --noconfirm --windowed main.py --add-data "config.json;." --add-data "images;images"
+        run: pyinstaller --noconfirm --onefile --windowed main.py --name image-annotator --add-data "config.json;." --add-data "images;images"
           dir dist
       - name: Upload EXE artifact
         uses: actions/upload-artifact@v4
