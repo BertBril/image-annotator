@@ -1,14 +1,13 @@
 from PIL import Image, ImageFilter, ImageOps
 
-def map_to_gray(val, revert=False, skew=2.0):
+def map_to_gray(val, revert=False):
   if revert:
     val = 1.0 - val
   val = min(max(val, 0.0), 1.0)
-  val = val ** skew
   v = int(round((1.0 - val) * 255))
   return (v, v, v)
 
-def create_icon_from_pil(pil_image, size=(32, 32), cutoff_percentile=50, use_gray=True, revert=False, skew=1.0):
+def create_icon_from_pil(pil_image, size=(32, 32), cutoff_percentile=50, use_gray=True, revert=False):
   img = pil_image.convert("L")
   img = ImageOps.autocontrast(img)
 
@@ -23,7 +22,7 @@ def create_icon_from_pil(pil_image, size=(32, 32), cutoff_percentile=50, use_gra
   edge = img.filter(edge_kernel)
 
   # Step 2: Max filter (5x5 spread)
-  edge_spread = edge.filter(ImageFilter.MaxFilter(5))
+  edge_spread = edge.filter(ImageFilter.MaxFilter(9))
 
   # Step 3: Threshold
   flat = list(edge_spread.getdata())
@@ -67,7 +66,7 @@ def create_icon_from_pil(pil_image, size=(32, 32), cutoff_percentile=50, use_gra
   for y in range(h):
     for x in range(w):
       val = blackness[y][x]
-      color = map_to_gray(val, revert=revert, skew=skew)
+      color = map_to_gray(val, revert=revert)
       out.putpixel((x, y), color)
 
   # Step 8: Stepwise downscale
