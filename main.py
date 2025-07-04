@@ -5,8 +5,34 @@ from PyQt6.QtWidgets import (
   QSplitter
 )
 from PyQt6.QtGui import QPixmap, QImage, QIcon
-from PyQt6.QtCore import Qt
+from PyQt6.QtCore import Qt, QSize
 from annotator import annotate_image, resolve_path
+
+
+def smart_icon_downscale(pixmap, target_size=QSize(32, 32)):
+  current = pixmap
+  w, h = current.width(), current.height()
+  target_w, target_h = target_size.width(), target_size.height()
+
+  # Iterate until both dimensions are within ~10% of target
+  while w > 1.1 * target_w or h > 1.1 * target_h:
+    # Reduce by 10% toward average target
+    new_w = int(w - max(1, (w - target_w) * 0.1))
+    new_h = int(h - max(1, (h - target_h) * 0.1))
+
+    # Optionally move toward square shape
+    avg = (new_w + new_h) // 2
+    new_w = int((9 * new_w + avg) / 10)
+    new_h = int((9 * new_h + avg) / 10)
+
+    current = current.scaled(new_w, new_h, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+    w, h = current.width(), current.height()
+
+  # Final scale to exact target with smoothing
+  final = current.scaled(target_size, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
+
+  return final
+
 
 class MainWindow(QWidget):
   def __init__(self):
@@ -87,9 +113,19 @@ class MainWindow(QWidget):
     self.setLayout(layout)
 
     for obj in self.cfg["objects"]:
-      name = obj.get("name", obj["img"]).strip()
-      self.combo.addItem(name)
-      self.obj_map[name] = obj
+        name = obj.get("name", obj["img"]).strip()
+        img_path = os.path.join(resolve_path(self.cfg["inputdir"]), obj["img"])
+        if os.path.exists(img_path):
+            icon_pixmap = QPixmap(img_path)
+            icon_pixmap = smart_icon_downscale(icon_pixmap, QSize(32, 32))
+            icon = QIcon(icon_pixmap)
+            image = icon_pixmap.toImage()
+            image.invertPixels()
+            icon = QIcon(QPixmap.fromImage(image))
+        else:
+            icon = QIcon()  # fallback to no icon if missing
+        self.combo.addItem(icon, name)
+        self.obj_map[name] = obj
 
     self.combo_index_connected = False
     self.delayed_hookup()
