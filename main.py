@@ -1,9 +1,10 @@
 import sys, os, json
 from PyQt6.QtWidgets import (
   QApplication, QWidget, QLabel, QComboBox, QVBoxLayout, QHBoxLayout,
-  QPushButton, QLineEdit, QFileDialog, QMessageBox, QGridLayout, QFrame
+  QPushButton, QLineEdit, QFileDialog, QMessageBox, QGridLayout, QFrame,
+  QSplitter
 )
-from PyQt6.QtGui import QPixmap, QImage, QIcon, QFont
+from PyQt6.QtGui import QPixmap, QImage, QIcon
 from PyQt6.QtCore import Qt
 from annotator import annotate_image, resolve_path
 
@@ -16,149 +17,169 @@ class MainWindow(QWidget):
     with open(resolve_path("config.json"), "r") as f:
       self.cfg = json.load(f)
 
-    self.default_font = self.cfg.get("fontfamily", "arial")
     self.default_units = ""
+    self.value_fields = []
+    self.unit_fields = []
+    self.obj_map = {}
 
-    # UI Elements
     self.combo = QComboBox()
-    self.combo.setFont(QFont('', 16))
+    self.combo.setStyleSheet("font-size: 16pt")
+    self.label_combo = QLabel("Image")
+    self.label_combo.setStyleSheet("font-size: 16pt")
+    self.label_combo.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
     self.image_label = QLabel()
     self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
-    self.value_fields = []
-    self.unit_fields = []
+    from PyQt6.QtWidgets import QStyle
 
+    self.apply_button = QPushButton("&Apply")
+    self.save_button = QPushButton("&Save...")
+
+    icon_apply = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton)
+    icon_save = self.style().standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton)
+
+    self.apply_button.setIcon(icon_apply)
+    self.save_button.setIcon(icon_save)
+
+    self.apply_button.setStyleSheet("font-size: 16pt")
+    self.save_button.setStyleSheet("font-size: 16pt")
+
+    self.apply_button.setFixedSize(130, 40)
+    self.save_button.setFixedSize(130, 40)
+
+    self.frame_combo = QFrame()
+    hcombo = QHBoxLayout()
+    hcombo.addStretch(1)
+    hcombo.addWidget(self.label_combo)
+    hcombo.addWidget(self.combo)
+    hcombo.addStretch(1)
+    self.frame_combo.setLayout(hcombo)
+
+    self.frame_fields = QFrame()
     self.grid = QGridLayout()
-    label = QLabel("Image")
-    label.setFont(QFont('', 16))
-    label.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-    self.grid.addWidget(label, 0, 0)
-    self.grid.addWidget(self.combo, 0, 1)
+    self.frame_fields.setLayout(self.grid)
 
-    self.grid_frame = QFrame()
-    self.grid_frame.setLayout(self.grid)
+    self.frame_buttons = QFrame()
+    hbtn = QHBoxLayout()
+    hbtn.addStretch(1)
+    hbtn.addWidget(self.apply_button)
+    hbtn.addWidget(self.save_button)
+    hbtn.addStretch(1)
+    self.frame_buttons.setLayout(hbtn)
 
-    self.apply_button = QPushButton("Apply")
-    self.save_button = QPushButton("Save")
-    self.apply_button.setFont(QFont('', 16))
-    self.save_button.setFont(QFont('', 16))
+    self.frame_top = QFrame()
+    vtop = QVBoxLayout()
+    vtop.addWidget(self.frame_combo)
+    vtop.addWidget(self.frame_fields)
+    vtop.addWidget(self.frame_buttons)
+    self.frame_top.setLayout(vtop)
 
-    self.apply_button.clicked.connect(self.apply_annotations)
-    self.save_button.clicked.connect(self.save_image)
-
-    top_layout = QVBoxLayout()
-    top_layout.addWidget(self.grid_frame)
-
-    button_layout = QHBoxLayout()
-    button_layout.addWidget(self.apply_button)
-    button_layout.addWidget(self.save_button)
+    self.splitter = QSplitter(Qt.Orientation.Vertical)
+    self.splitter.addWidget(self.frame_top)
+    self.splitter.addWidget(self.image_label)
+    self.splitter.setSizes([200, 500])
+    self.splitter.setHandleWidth(6)
+    self.splitter.setStyleSheet("QSplitter::handle { background-color: #888; }")
 
     layout = QVBoxLayout()
-    layout.addLayout(top_layout)
-    layout.addLayout(button_layout)
-    layout.addWidget(self.image_label, stretch=3)
+    layout.addWidget(self.splitter)
     self.setLayout(layout)
 
-    # Delay connections until initialized
-    self.obj_map = {}
     for obj in self.cfg["objects"]:
-      name = obj.get("name", obj["img"])
-      self.obj_map[name] = obj
+      name = obj.get("name", obj["img"]).strip()
       self.combo.addItem(name)
+      self.obj_map[name] = obj
 
-    defobj = self.cfg.get("defobj")
-    if defobj:
-      idx = self.combo.findText(defobj)
-      if idx >= 0:
-        self.combo.setCurrentIndex(idx)
+    self.combo_index_connected = False
+    self.delayed_hookup()
 
+  def delayed_hookup(self):
     self.combo.currentIndexChanged.connect(self.load_object)
-    self.load_object(self.combo.currentIndex())
+    self.apply_button.clicked.connect(self.apply_annotations)
+    self.save_button.clicked.connect(self.save_image)
+    defobj = self.cfg.get("defobj")
+    idx = self.combo.findText(defobj) if defobj else 0
+    if idx < 0:
+      idx = 0
+    self.combo.setCurrentIndex(idx)
+    self.load_object(idx)
 
   def load_object(self, idx):
+    self.clear_fields()
+    name = self.combo.currentText()
+    obj = self.obj_map[name]
+    annots = obj["annots"]
     self.value_fields = []
     self.unit_fields = []
 
-    # Clear grid except row 0
-    while self.grid.count() > 2:
-      item = self.grid.takeAt(2)
+    for row, a in enumerate(annots):
+      lbl = QLabel(a.get("lbl", ""))
+      lbl.setStyleSheet("font-size: 16pt")
+      lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+
+      val = QLineEdit(str(a.get("value", a.get("default", ""))))
+      val.setStyleSheet("font-size: 16pt")
+      val.setMinimumWidth(100)
+      val.returnPressed.connect(self.apply_annotations)
+
+      units = QLineEdit(a.get("units", ""))
+      units.setStyleSheet("font-size: 16pt")
+      units.setMinimumWidth(60)
+      units.returnPressed.connect(self.apply_annotations)
+
+      self.grid.addWidget(lbl, row, 0)
+      self.grid.addWidget(val, row, 1)
+      self.grid.addWidget(units, row, 2)
+
+      self.value_fields.append((a, val))
+      self.unit_fields.append((a, units))
+
+    self.apply_annotations()
+
+  def clear_fields(self):
+    while self.grid.count():
+      item = self.grid.takeAt(0)
       w = item.widget()
       if w:
         w.deleteLater()
 
-    name = self.combo.currentText()
-    obj = self.obj_map.get(name)
-    if not obj:
-      return
-
-    annots = obj.get("annots", [])
-    for i, a in enumerate(annots):
-      row = i + 1
-      lbl = QLabel(a.get("lbl", ""))
-      lbl.setFont(QFont('', 16))
-      lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-
-      val_edit = QLineEdit(str(a.get("value", a.get("default", ""))))
-      val_edit.setFont(QFont('', 16))
-      val_edit.setMinimumWidth(100)
-      val_edit.returnPressed.connect(self.apply_annotations)
-
-      units_edit = QLineEdit(str(a.get("units", "")))
-      units_edit.setFont(QFont('', 16))
-      units_edit.setMinimumWidth(80)
-      units_edit.returnPressed.connect(self.apply_annotations)
-
-      self.grid.addWidget(lbl, row, 0)
-      self.grid.addWidget(val_edit, row, 1)
-      self.grid.addWidget(units_edit, row, 2)
-
-      self.value_fields.append((a, val_edit))
-      self.unit_fields.append(units_edit)
-
-    self.adjustSize()
-    self.apply_annotations()
-
   def apply_annotations(self):
     name = self.combo.currentText()
     obj = self.obj_map[name]
-
-    for (a, val_edit), units_edit in zip(self.value_fields, self.unit_fields):
-      a["value"] = val_edit.text()
-      a["units"] = units_edit.text()
-
+    for (a, val), (_, units) in zip(self.value_fields, self.unit_fields):
+      a["value"] = val.text()
+      a["units"] = units.text()
     img_map = annotate_image(self.cfg, self.default_units)
     img, _ = img_map[name]
-    qimg = self.pil_to_qimage(img)
-    self.image_label.setPixmap(QPixmap.fromImage(qimg))
+    self.image_label.setPixmap(QPixmap.fromImage(self.pil_to_qimage(img)))
 
   def save_image(self):
     name = self.combo.currentText()
     obj = self.obj_map[name]
-
-    for (a, val_edit), units_edit in zip(self.value_fields, self.unit_fields):
-      a["value"] = val_edit.text()
-      a["units"] = units_edit.text()
-
+    for (a, val), (_, units) in zip(self.value_fields, self.unit_fields):
+      a["value"] = val.text()
+      a["units"] = units.text()
     img_map = annotate_image(self.cfg, self.default_units)
     img, outdir = img_map[name]
     if not os.path.exists(outdir):
       os.makedirs(outdir)
-
-    base = os.path.splitext(obj["img"])[0]
-    suggested = os.path.join(outdir, base + "_annotated.png")
-    path, _ = QFileDialog.getSaveFileName(self, "Save Image As", suggested, "PNG Files (*.png)")
+    basename = os.path.splitext(obj["img"])[0]
+    default_path = os.path.join(outdir, basename + "_annotated.png")
+    path, _ = QFileDialog.getSaveFileName(self, "Save Image", default_path, "PNG Image (*.png)")
     if not path:
       return
     if not path.lower().endswith(".png"):
       path += ".png"
     img.save(path)
-    QMessageBox.information(self, "Saved", f"Saved to:\n{path}")
+    QMessageBox.information(self, "Saved", "Saved to:\n" + path)
 
   def pil_to_qimage(self, im):
     if im.mode != "RGBA":
       im = im.convert("RGBA")
     data = im.tobytes("raw", "RGBA")
-    return QImage(data, im.size[0], im.size[1], QImage.Format.Format_RGBA8888)
+    qimg = QImage(data, im.size[0], im.size[1], QImage.Format.Format_RGBA8888)
+    return qimg
 
 if __name__ == "__main__":
   app = QApplication(sys.argv)
