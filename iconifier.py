@@ -1,35 +1,18 @@
-import numpy as np
 from PIL import Image, ImageFilter, ImageOps
 
-# grayscale mapping (preserved for future use)
-def map_to_gray(val, revert=False, skew=2.5):
+def map_to_gray(val, revert=False, skew=2.0):
   if revert:
     val = 1.0 - val
-  val = val ** skew  # skew > 1 darkens the result
+  val = min(max(val, 0.0), 1.0)
+  val = val ** skew
   v = int(round((1.0 - val) * 255))
   return (v, v, v)
 
-# Approximate Viridis colormap with 20 RGB values (from light to dark)
-# unfortunately, delivers ugliness
-VIRIDIS_COLORS = [
-  (253, 231, 37), (244, 228, 52), (235, 225, 65), (217, 217, 81),
-  (199, 209, 95), (181, 201, 108), (154, 190, 122), (127, 179, 133),
-  (102, 166, 142), (78, 154, 149), (61, 143, 153), (45, 132, 155),
-  (36, 121, 154), (31, 110, 151), (31, 99, 146), (35, 88, 139),
-  (41, 74, 129), (46, 61, 115), (51, 47, 99), (53, 35, 82)
-]
-
-def map_to_viridis(val, revert=False):
-  if revert:
-    val = 1.0 - val
-  idx = min(int(val * (len(VIRIDIS_COLORS) - 1)), len(VIRIDIS_COLORS) - 1)
-  return VIRIDIS_COLORS[idx]
-
-def create_icon_from_pil(pil_image, size=(32, 32), cutoff_percentile=50, use_gray=True, revert=False):
-  img = pil_image.convert("L")  # Grayscale
+def create_icon_from_pil(pil_image, size=(32, 32), cutoff_percentile=50, use_gray=True, revert=False, skew=1.0):
+  img = pil_image.convert("L")
   img = ImageOps.autocontrast(img)
 
-  # 1. Edge detection using Laplacian-like kernel
+  # Step 1: Edge detection
   edge_kernel = ImageFilter.Kernel(
     size=(3, 3),
     kernel=[0, -1, 0,
@@ -39,44 +22,58 @@ def create_icon_from_pil(pil_image, size=(32, 32), cutoff_percentile=50, use_gra
   )
   edge = img.filter(edge_kernel)
 
-  # 2. Spread: 5x5 max filter to thicken edges
-  edge_spread = edge.filter(ImageFilter.MaxFilter(11))
+  # Step 2: Max filter (5x5 spread)
+  edge_spread = edge.filter(ImageFilter.MaxFilter(5))
 
-  # 3. Binarize
-  edge_np = np.array(edge_spread)
-  threshold = np.percentile(edge_np, 60)
-  binary = (edge_np > threshold).astype(np.uint8)
+  # Step 3: Threshold
+  flat = list(edge_spread.getdata())
+  sorted_vals = sorted(flat)
+  idx = int(len(sorted_vals) * 0.8)
+  threshold = sorted_vals[min(idx, len(sorted_vals) - 1)]
 
-  # 4. Compute blackness: 5x5 window of black pixel count using summed convolution
-  kernel = np.ones((5, 5), dtype=np.uint8)
-  padded = np.pad(binary, 2, mode="edge")
-  blackness = np.zeros_like(binary, dtype=np.uint8)
-  for y in range(binary.shape[0]):
-    for x in range(binary.shape[1]):
-      blackness[y, x] = np.sum(padded[y:y+5, x:x+5])
+  # Step 4: Binarize
+  w, h = edge_spread.size
+  binary = [[1 if edge_spread.getpixel((x, y)) > threshold else 0 for x in range(w)] for y in range(h)]
 
-  # 5. Cut off lowest X% and normalize
-  cutoff = np.percentile(blackness, cutoff_percentile)
-  blackness = blackness.astype(np.float32)
-  blackness[blackness < cutoff] = 0
-  blackness[blackness >= cutoff] -= cutoff
-  blackness = blackness / (blackness.max() or 1)
+  # Step 5: Local blackness in 5x5 neighborhood
+  def local_blackness(y, x):
+    count = 0
+    for dy in range(-2, 3):
+      for dx in range(-2, 3):
+        ny = y + dy
+        nx = x + dx
+        if 0 <= ny < h and 0 <= nx < w:
+          count += binary[ny][nx]
+    return count / 25.0  # normalize to 0..1
 
-  # 6. Map to color
-  h, w = blackness.shape
-  rgb_array = np.zeros((h, w, 3), dtype=np.uint8)
+  blackness = [[local_blackness(y, x) for x in range(w)] for y in range(h)]
+
+  # Step 6: Apply cutoff percentile
+  all_vals = [v for row in blackness for v in row]
+  all_vals.sort()
+  cutoff_index = int(len(all_vals) * cutoff_percentile / 100)
+  cutoff = all_vals[min(cutoff_index, len(all_vals) - 1)]
+
   for y in range(h):
     for x in range(w):
-      if use_gray:
-        rgb_array[y, x] = map_to_gray(blackness[y, x], revert=revert)
+      v = blackness[y][x]
+      if v < cutoff:
+        blackness[y][x] = 0.0
       else:
-        rgb_array[y, x] = map_to_viridis(blackness[y, x], revert=revert)
+        blackness[y][x] = (v - cutoff) / (1.0 - cutoff) if (1.0 - cutoff) > 0 else 0.0
 
-  # 7. Convert to image and stepwise downscale
-  rgb_img = Image.fromarray(rgb_array, mode="RGB")
+  # Step 7: Map to RGB
+  out = Image.new("RGB", (w, h))
+  for y in range(h):
+    for x in range(w):
+      val = blackness[y][x]
+      color = map_to_gray(val, revert=revert, skew=skew)
+      out.putpixel((x, y), color)
+
+  # Step 8: Stepwise downscale
   for target in [128, 64, 32]:
-    if rgb_img.size[0] > target:
-      rgb_img = rgb_img.resize((target, target), Image.BILINEAR)
+    if out.size[0] > target:
+      out = out.resize((target, target), Image.BILINEAR)
 
-  return rgb_img.resize(size, Image.LANCZOS)
+  return out.resize(size, Image.LANCZOS)
 
